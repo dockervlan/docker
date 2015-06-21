@@ -39,7 +39,7 @@ docker-run - Run a command in a new container
 [**--memory-swap**[=*MEMORY-SWAP*]]
 [**--mac-address**[=*MAC-ADDRESS*]]
 [**--name**[=*NAME*]]
-[**--net**[=*"bridge"*]]
+[**--net**[=*"bridge:ip"*]]
 [**--oom-kill-disable**[=*false*]]
 [**-P**|**--publish-all**[=*false*]]
 [**-p**|**--publish**[=*[]*]]
@@ -297,7 +297,8 @@ and foreground Docker containers.
 
 **--net**="bridge"
    Set the Network mode for the container
-                               'bridge': creates a new network stack for the container on the docker bridge
+                               'bridge:ip': creates a new network stack for the container on the docker bridge
+                                           with ip address of the container
                                'none': no networking for this container
                                'container:<name|id>': reuses another container network stack
                                'host': use the host network stack inside the container.  Note: the host mode gives the container full access to local system services such as D-bus and is therefore considered insecure.
