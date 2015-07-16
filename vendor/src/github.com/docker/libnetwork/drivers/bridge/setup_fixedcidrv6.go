@@ -4,12 +4,17 @@ import (
 	"os"
 
 	log "github.com/Sirupsen/logrus"
+	"github.com/docker/libnetwork/ipallocator"
 	"github.com/vishvananda/netlink"
 )
 
 func setupFixedCIDRv6(config *networkConfiguration, i *bridgeInterface) error {
 	log.Debugf("Using IPv6 subnet: %v", config.FixedCIDRv6)
-	if err := ipAllocator.RegisterSubnet(config.FixedCIDRv6, config.FixedCIDRv6); err != nil {
+	if ipAllocator[config.VlanId] == nil {
+		ipAllocator[config.VlanId] = ipallocator.New()
+	}
+
+	if err := ipAllocator[config.VlanId].RegisterSubnet(config.FixedCIDRv6, config.FixedCIDRv6); err != nil {
 		return &FixedCIDRv6Error{Net: config.FixedCIDRv6, Err: err}
 	}
 

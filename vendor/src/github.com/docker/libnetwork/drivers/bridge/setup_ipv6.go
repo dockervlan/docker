@@ -59,7 +59,7 @@ func setupGatewayIPv6(config *networkConfiguration, i *bridgeInterface) error {
 	if !config.FixedCIDRv6.Contains(config.DefaultGatewayIPv6) {
 		return &ErrInvalidGateway{}
 	}
-	if _, err := ipAllocator.RequestIP(config.FixedCIDRv6, config.DefaultGatewayIPv6); err != nil {
+	if _, err := ipAllocator[config.VlanId].RequestIP(config.FixedCIDRv6, config.DefaultGatewayIPv6); err != nil {
 		return err
 	}
 

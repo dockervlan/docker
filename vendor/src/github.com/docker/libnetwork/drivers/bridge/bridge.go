@@ -30,7 +30,7 @@ const (
 )
 
 var (
-	ipAllocator *ipallocator.IPAllocator
+	ipAllocator map[int](*ipallocator.IPAllocator)
 )
 
 // configuration info for the "bridge" driver.
@@ -41,8 +41,8 @@ type configuration struct {
 // networkConfiguration for network specific configuration
 type networkConfiguration struct {
 	BridgeName            string
-	AddressIPv4           *net.IPNet
-	FixedCIDR             *net.IPNet
+	AddressIPv4           map[int](*net.IPNet)
+	FixedCIDR             map[int](*net.IPNet)
 	FixedCIDRv6           *net.IPNet
 	EnableIPv6            bool
 	EnableIPTables        bool
@@ -100,7 +100,8 @@ type driver struct {
 }
 
 func init() {
-	ipAllocator = ipallocator.New()
+	ipAllocator = make(map[int](*ipallocator.IPAllocator))
+	ipAllocator[0] = ipallocator.New()
 }
 
 // New constructs a new bridge driver
@@ -129,23 +130,23 @@ func (c *networkConfiguration) Validate() error {
 	}
 
 	// If bridge v4 subnet is specified
-	if c.AddressIPv4 != nil {
+	if c.AddressIPv4[c.VlanId] != nil {
 		// If Container restricted subnet is specified, it must be a subset of bridge subnet
-		if c.FixedCIDR != nil {
+		if c.FixedCIDR[c.VlanId] != nil {
 			// Check Network address
-			if !c.AddressIPv4.Contains(c.FixedCIDR.IP) {
+			if !c.AddressIPv4[c.VlanId].Contains(c.FixedCIDR[c.VlanId].IP) {
 				return &ErrInvalidContainerSubnet{}
 			}
 			// Check it is effectively a subset
-			brNetLen, _ := c.AddressIPv4.Mask.Size()
-			cnNetLen, _ := c.FixedCIDR.Mask.Size()
+			brNetLen, _ := c.AddressIPv4[c.VlanId].Mask.Size()
+			cnNetLen, _ := c.FixedCIDR[c.VlanId].Mask.Size()
 			if brNetLen > cnNetLen {
 				return &ErrInvalidContainerSubnet{}
 			}
 		}
 		// If default gw is specified, it must be part of bridge subnet
 		if c.DefaultGatewayIPv4 != nil {
-			if !c.AddressIPv4.Contains(c.DefaultGatewayIPv4) {
+			if !c.AddressIPv4[c.VlanId].Contains(c.DefaultGatewayIPv4) {
 				return &ErrInvalidGateway{}
 			}
 		}
@@ -173,8 +174,8 @@ func (c *networkConfiguration) Conflicts(o *networkConfiguration) bool {
 	}
 
 	// They must be in different subnets
-	if (c.AddressIPv4 != nil && o.AddressIPv4 != nil) &&
-		(c.AddressIPv4.Contains(o.AddressIPv4.IP) || o.AddressIPv4.Contains(c.AddressIPv4.IP)) {
+	if (c.AddressIPv4[c.VlanId] != nil && o.AddressIPv4[c.VlanId] != nil) &&
+		(c.AddressIPv4[c.VlanId].Contains(o.AddressIPv4[c.VlanId].IP) || o.AddressIPv4[c.VlanId].Contains(c.AddressIPv4[c.VlanId].IP)) {
 		return true
 	}
 
@@ -255,7 +256,7 @@ func (c *networkConfiguration) fromMap(data map[string]interface{}) error {
 		if s, ok := i.(string); ok {
 			if ip, nw, e := net.ParseCIDR(s); e == nil {
 				nw.IP = ip
-				c.AddressIPv4 = nw
+				c.AddressIPv4[c.VlanId] = nw
 			} else {
 				return types.BadRequestErrorf("failed to parse AddressIPv4 value")
 			}
@@ -268,7 +269,7 @@ func (c *networkConfiguration) fromMap(data map[string]interface{}) error {
 		if s, ok := i.(string); ok {
 			if ip, nw, e := net.ParseCIDR(s); e == nil {
 				nw.IP = ip
-				c.FixedCIDR = nw
+				c.FixedCIDR[c.VlanId] = nw
 			} else {
 				return types.BadRequestErrorf("failed to parse FixedCIDR value")
 			}
@@ -393,9 +394,9 @@ func (c *networkConfiguration) conflictsWithNetworks(id types.UUID, others []*br
 		// bridges. This could not be completely caught by the config conflict
 		// check, because networks which config does not specify the AddressIPv4
 		// get their address and subnet selected by the driver (see electBridgeIPv4())
-		if c.AddressIPv4 != nil {
-			if nwBridge.bridgeIPv4.Contains(c.AddressIPv4.IP) ||
-				c.AddressIPv4.Contains(nwBridge.bridgeIPv4.IP) {
+		if c.AddressIPv4[nwConfig.VlanId] != nil {
+			if nwBridge.bridgeIPv4.Contains(c.AddressIPv4[nwConfig.VlanId].IP) ||
+				c.AddressIPv4[nwConfig.VlanId].Contains(nwBridge.bridgeIPv4.IP) {
 				return types.ForbiddenErrorf("conflicts with network %s (%s) by ip network", nwID, nwConfig.BridgeName)
 			}
 		}
@@ -519,9 +520,12 @@ func parseNetworkOptions(option options.Generic) (*networkConfiguration, error) 
 				IP:   ip,
 				Mask: netv4.Mask,
 			}
-
-			config.AddressIPv4 = bipNet
-			logrus.Infof("config.AddressIPv4: %#v", config.AddressIPv4)
+			if config.AddressIPv4 == nil {
+				config.AddressIPv4 = map[int](*net.IPNet){config.VlanId: bipNet}
+			} else {
+				config.AddressIPv4[config.VlanId] = bipNet
+			}
+			logrus.Infof("config.AddressIPv4: %#v", config.AddressIPv4[config.VlanId])
 		}
 	}
 	if _, ok := option["FixedCIDR"]; ok {
@@ -531,8 +535,12 @@ func parseNetworkOptions(option options.Generic) (*networkConfiguration, error) 
 			if err != nil {
 				return nil, err
 			}
-			config.FixedCIDR = fCIDR
-			logrus.Infof("config.FixedCIDR: %#v", config.FixedCIDR)
+			if config.FixedCIDR == nil {
+				config.FixedCIDR = map[int](*net.IPNet){config.VlanId: fCIDR}
+			} else {
+				config.FixedCIDR[config.VlanId] = fCIDR
+			}
+			logrus.Infof("config.FixedCIDR: %#v", config.FixedCIDR[config.VlanId])
 		}
 	}
 
@@ -678,7 +686,7 @@ func (d *driver) CreateNetwork(id types.UUID, option map[string]interface{}) err
 
 		// Setup the bridge to allocate containers IPv4 addresses in the
 		// specified subnet.
-		{config.FixedCIDR != nil, setupFixedCIDRv4},
+		{config.FixedCIDR[config.VlanId] != nil, setupFixedCIDRv4},
 
 		// Setup the bridge to allocate containers global IPv6 addresses in the
 		// specified subnet.
@@ -969,7 +977,7 @@ func (d *driver) CreateEndpoint(nid, eid types.UUID, epInfo driverapi.EndpointIn
 	}
 
 	// v4 address for the sandbox side pipe interface
-	ip4, err := ipAllocator.RequestIP(n.bridge.bridgeIPv4, epConfig.IPAddressv4)
+	ip4, err := ipAllocator[n.config.VlanId].RequestIP(n.bridge.bridgeIPv4, epConfig.IPAddressv4)
 	if err != nil {
 		return err
 	}
@@ -1002,7 +1010,7 @@ func (d *driver) CreateEndpoint(nid, eid types.UUID, epInfo driverapi.EndpointIn
 			}
 		}
 
-		ip6, err := ipAllocator.RequestIP(network, ip6)
+		ip6, err := ipAllocator[n.config.VlanId].RequestIP(network, ip6)
 		if err != nil {
 			return err
 		}
@@ -1085,7 +1093,7 @@ func (d *driver) DeleteEndpoint(nid, eid types.UUID) error {
 	n.releasePorts(ep)
 
 	// Release the v4 address allocated to this endpoint's sandbox interface
-	err = ipAllocator.ReleaseIP(n.bridge.bridgeIPv4, ep.addr.IP)
+	err = ipAllocator[n.config.VlanId].ReleaseIP(n.bridge.bridgeIPv4, ep.addr.IP)
 	if err != nil {
 		return err
 	}
@@ -1096,7 +1104,7 @@ func (d *driver) DeleteEndpoint(nid, eid types.UUID) error {
 
 	// Release the v6 address allocated to this endpoint's sandbox interface
 	if config.EnableIPv6 {
-		err := ipAllocator.ReleaseIP(n.bridge.bridgeIPv6, ep.addrv6.IP)
+		err := ipAllocator[n.config.VlanId].ReleaseIP(n.bridge.bridgeIPv6, ep.addrv6.IP)
 		if err != nil {
 			return err
 		}
