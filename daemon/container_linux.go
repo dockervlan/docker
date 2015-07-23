@@ -814,7 +814,7 @@ func (container *Container) AllocateNetwork() error {
 
 	var networkDriver string
 	service := container.Config.PublishService
-	if ! networkByName && mode.IsDefault() {
+	if !networkByName && mode.IsDefault() {
 		if service != "" {
 			service, networkName, networkDriver = parseService(controller, service)
 		} else {
@@ -829,7 +829,7 @@ func (container *Container) AllocateNetwork() error {
 		service = strings.Replace(container.Name, ".", "-", -1)
 	}
 
-	if ! networkByName {
+	if !networkByName {
 		n, err = controller.NetworkByName(networkName)
 	}
 	if err != nil {

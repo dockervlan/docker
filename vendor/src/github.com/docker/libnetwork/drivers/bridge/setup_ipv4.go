@@ -75,14 +75,14 @@ func setupBridgeIPv4(config *networkConfiguration, i *bridgeInterface) error {
 }
 
 func allocateBridgeIP(config *networkConfiguration, i *bridgeInterface) error {
-	ipAllocator.RequestIP(i.bridgeIPv4, i.bridgeIPv4.IP)
+	ipAllocator[config.VlanId].RequestIP(i.bridgeIPv4, i.bridgeIPv4.IP)
 	return nil
 }
 
 func electBridgeIPv4(config *networkConfiguration) (*net.IPNet, error) {
 	// Use the requested IPv4 CIDR when available.
-	if config.AddressIPv4 != nil {
-		return config.AddressIPv4, nil
+	if config.AddressIPv4[config.VlanId] != nil {
+		return config.AddressIPv4[config.VlanId], nil
 	}
 
 	// We don't check for an error here, because we don't really care if we
@@ -109,7 +109,7 @@ func setupGatewayIPv4(config *networkConfiguration, i *bridgeInterface) error {
 	if !i.bridgeIPv4.Contains(config.DefaultGatewayIPv4) {
 		return &ErrInvalidGateway{}
 	}
-	if _, err := ipAllocator.RequestIP(i.bridgeIPv4, config.DefaultGatewayIPv4); err != nil {
+	if _, err := ipAllocator[config.VlanId].RequestIP(i.bridgeIPv4, config.DefaultGatewayIPv4); err != nil {
 		return err
 	}
 

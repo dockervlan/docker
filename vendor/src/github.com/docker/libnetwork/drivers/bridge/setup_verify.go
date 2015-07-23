@@ -17,8 +17,8 @@ func setupVerifyAndReconcile(config *networkConfiguration, i *bridgeInterface) e
 	}
 
 	// Verify that the bridge IPv4 address matches the requested configuration.
-	if config.AddressIPv4 != nil && !addrv4.IP.Equal(config.AddressIPv4.IP) {
-		return &IPv4AddrNoMatchError{IP: addrv4.IP, CfgIP: config.AddressIPv4.IP}
+	if config.AddressIPv4[config.VlanId] != nil && !addrv4.IP.Equal(config.AddressIPv4[config.VlanId].IP) {
+		return &IPv4AddrNoMatchError{IP: addrv4.IP, CfgIP: config.AddressIPv4[config.VlanId].IP}
 	}
 
 	// Verify that one of the bridge IPv6 addresses matches the requested
